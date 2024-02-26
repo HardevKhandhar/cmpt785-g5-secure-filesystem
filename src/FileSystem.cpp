@@ -345,7 +345,7 @@ void FileSystem::processUserCommand(const std::string &command, bool isAdmin, co
     if(command.substr(0,3) == "cd ") {
         changeDirectory(command.substr(3));
     } else if(command.substr(0,2) == "ls") {
-        listDirectoryContents((base_directory).c_str());
+        listDirectoryContents((char*)(base_directory).c_str());
     } else if(command == "pwd") {
         std::string workingDirectory = getCurrentWorkingDirectory();
         workingDirectory = "./" + workingDirectory;
