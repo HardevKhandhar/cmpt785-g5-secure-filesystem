@@ -341,6 +341,10 @@ void FileSystem::createFileSystem(const std::string &_username, int count) {
     std::filesystem::create_directories(base_directory/"shared");
 }
 
+bool fileNameIsValid(const std::string filename) {
+    return !filename.empty() && filename.find("..") == std::string::npos && filename.find('/') == std::string::npos;
+}
+
 void FileSystem::processUserCommand(const std::string &command, bool isAdmin, const std::string &user) {
     if(command.substr(0,3) == "cd ") {
         changeDirectory(command.substr(3));
@@ -365,22 +369,47 @@ void FileSystem::processUserCommand(const std::string &command, bool isAdmin, co
         makeFile(command, user);
     } else if (command.substr(0, 4) == "cat ") {
         std::string filename = command.substr(4);
-        catFile(filename);
-    } else if (command.substr(0,6) == "share ") {
-        std::vector _arr = splitText(command.substr(6),' ');
-        std::vector source = splitText(_arr[0],'/'); //SourcePath - Assuming the path is ./filesystem/<user>/personal/<file.ext>
-        std::string filename = source[source.size()/source[0].size()-1];
-        std::string sharedPath = "./" + source[1] + "/" + source[2] + "/shared";
-        std::string originDirectory = _arr[0].substr(0,_arr[0].length()-filename.length()); //Path is ./filesystem/<user>/personal/
-        if(!std::filesystem::exists(originDirectory) || !std::filesystem::is_directory(originDirectory)) {
-            std::cout << "Provided path is not a valid directory. " << std::endl;
+        if (fileNameIsValid(filename)) {
+            catFile(filename);
         } else {
-            for(const auto&entry : std::filesystem::directory_iterator(originDirectory)){
-                if(entry.is_regular_file() && entry.path().filename()==filename){
-                    commandShareFile(_arr[0],sharedPath,filename,_arr[1],source[2]);
-                }
-            }
+            std::cout << "Provided filename is not valid." << std::endl;
         }
+    } else if (command.substr(0,6) == "share ") {
+        std::vector source = splitText(command,' ');
+        if(source.size() < 3) {
+            std::cout << "Not enough arguments." << std::endl;
+            return;
+        }
+
+        std::string filename = source[1];
+        if (!fileNameIsValid(filename)) {
+            std::cout << "Provided filename is not valid." << std::endl;
+            return;
+        }
+
+        std::string receiver = source[2];
+        
+        // TODO: check if receiver is valid.
+
+        std::string sourceUserName = splitText("./" + getCurrentWorkingDirectory(), '/')[2];
+
+        std::string filePath = "./" + getCurrentWorkingDirectory() + "/" + filename;
+        std::string personalDirectory = "./filesystem/" + sourceUserName + "/personal";
+
+        if (filePath.find(personalDirectory) == std::string::npos) {
+            std::cout << "Can't share file outside your personal directory." << std::endl;
+            return;
+        }
+
+        if(!std::filesystem::exists(filePath) || !std::filesystem::is_regular_file(filePath)) {
+            std::cout << "File does not exist." << std::endl;
+            return;
+        }
+
+        std::string sharedPath = "./filesystem/" + receiver + "/shared";
+
+        commandShareFile(filePath, sharedPath, filename, receiver, sourceUserName);
+        // FIX: when a file content is updated, the file is also shared with the sender.
     } else {
         std::cout << "Invalid Command" << std::endl;
     }

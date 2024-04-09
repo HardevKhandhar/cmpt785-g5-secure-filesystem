@@ -70,3 +70,8 @@ atlassian-ide-plugin.xml
 
 filesystem/
 public_keys/
+CMakeFiles/
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+cmpt785_g5_secure_filesystem
