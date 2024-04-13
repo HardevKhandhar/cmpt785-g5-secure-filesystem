@@ -2,6 +2,7 @@
 #define CMPT785_G5_SECURE_FILESYSTEM_ENCRYPTION_H
 
 #include <filesystem>
+#include <fstream>
 #include <openssl/aes.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -25,5 +26,8 @@ bool createUserKey(const std::string &username, bool isAdmin);
 std::string encryptPlainText(const std::string &plaintext, const std::string &username);
 
 std::string decryptCipherText(std::string ciphertext, const std::string &username);
+
+void encryptFile(std::string username, std::string filepath);
+std::string decryptFile(std::string username, std::string filepath);
 
 #endif // CMPT785_G5_SECURE_FILESYSTEM_ENCRYPTION_H

@@ -128,6 +128,14 @@ void FileSystem::listDirectoryContents(const char *directory) {
 }
 
 void FileSystem::makeFile(const std::string& make_file, const std::string &user) {
+    // TODO: set size limit to file
+    // TODO: should be encrypted by share receiver public key
+    // TODO: admin should be able to read everything
+    //   if (plaintext.length() > FILE_SIZE_LIMIT) {
+    // std::cerr << "Error: file size limit (512MB) exceeded '" << filepath << "'" << std::endl;
+    // infile.close();
+    // return;
+    //   }
     // Extract filename and contents from input
     std::istringstream iss(make_file);
     std::string command, filename, contents;
@@ -220,6 +228,8 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     std::string sourceUserName = workingDirectoryContents[2];
     std::string sharedPath = workingDirectory.substr(0,workingDirectory.length()-workingDirectoryContents[3].length())+"shared";
 
+    encryptFile(sourceUserName, filename);
+
     if (flag) {
         if(receivers.size() > 0) {
             for(const std::string& str:receivers) {
@@ -284,18 +294,14 @@ void FileSystem::createDirectory(const std::string &input, const std::string &us
 
 void FileSystem::catFile(const std::string &filename) {
     std::string currentWorkingDirectory = getCurrentWorkingDirectory();
-    std::string filePath = currentWorkingDirectory + "/" + filename;
+    std::string filePath = "./" + currentWorkingDirectory + "/" + filename;
 
-    std::ifstream file(filePath);
-    if (file.is_open()) {
-        std::string line;
-        while (std::getline(file, line)) {
-            std::cout << line << std::endl;
-        }
-        file.close();
-    } else {
+    if (!std::filesystem::exists(filePath)) {
         std::cout << filename << " doesn't exist." << std::endl;
+        return;
     }
+    
+    std::cout << decryptFile(username, filePath) << std::endl;;
 }
 
 void FileSystem::commandShareFile(const std::filesystem::path &source, const std::filesystem::path& sharedPath ,const std::string &sourcefile, const std::string &_username, const std::string &_source_username) {
