@@ -51,8 +51,9 @@ int main(int argc, char** argv) {
 
     if(!authenticateUser(username)) {
         if(adminStatus) {
-            FileSystem fs(username,adminStatus,1);
-            FileSystem::addUser(username,adminStatus);
+            FileSystem fs(username,adminStatus);
+            fs.createFileSystem(username);
+            fs.addUser(username,adminStatus);
         } else {
             std::cerr << "Authentication failed" << std::endl;
             return 1;

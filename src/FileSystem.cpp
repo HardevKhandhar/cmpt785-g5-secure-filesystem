@@ -246,6 +246,15 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     }
 }
 
+bool userExists(const std::string& username) {
+    for (const auto& entry : std::filesystem::directory_iterator(PUB_KEY_LOC)) {
+        if (entry.is_regular_file() && entry.path().filename() == username  + "_pub.pem") {
+            return true;
+        }
+    }
+    return false;
+}
+
 void FileSystem::createDirectory(const std::string &input, const std::string &user) {
     // Extract directory name from input
     std::string dir = input.substr(input.find(" ") + 1);
@@ -331,20 +340,33 @@ void FileSystem::commandShareFile(const std::filesystem::path &source, const std
     }
 };
 
-FileSystem::FileSystem(const std::string &username, bool isAdmin, int count):username(username) {
+FileSystem::FileSystem(const std::string &username, bool isAdmin):username(username) {
     base_directory = "./filesystem/" + username;
     if(isAdmin) root_directory = "./filesystem";
     else root_directory = base_directory;
-    createFileSystem(username,count);
+    createFileNameMapping();
 }
 
-void FileSystem::createFileSystem(const std::string &_username, int count) {
-    base_directory = "./filesystem/" + _username;
-    if(count == 1) {
-        std::filesystem::create_directories(base_directory/".metadata/private_keys");
+void FileSystem::createFileSystem(const std::string &_username) {
+    if(userExists(_username)) {
+        return;
     }
+
+    base_directory = "./filesystem/" + _username;
+    std::filesystem::create_directories(base_directory/".metadata/private_keys");
     std::filesystem::create_directories(base_directory/"personal");
     std::filesystem::create_directories(base_directory/"shared");
+}
+
+void FileSystem::createFileNameMapping() {
+    if (std::filesystem::exists("./filesystem/.metadata/FileNameMapping.txt") && std::filesystem::is_regular_file("./filesystem/.metadata/FileNameMapping.txt")) {
+        return;
+    }
+
+    std::filesystem::create_directories("./filesystem/.metadata");
+    std::ofstream MyFile("./filesystem/.metadata/FileNameMapping.txt");
+    MyFile << "";
+    MyFile.close();
 }
 
 bool fileNameIsValid(const std::string filename) {
@@ -364,7 +386,13 @@ void FileSystem::processUserCommand(const std::string &command, bool isAdmin, co
         if(isAdmin) {
             std::vector<std::string>str = splitText(command,' ');
             std::string _username=str[1];
-            createFileSystem(_username,1);
+
+            if (userExists(_username)) {
+                std::cout << "User already exists." << std::endl;
+                return;
+            }
+
+            createFileSystem(_username);
             addUser(_username);
         } else {
             std::cout << "Invalid Command" << std::endl;

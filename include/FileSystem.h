@@ -32,8 +32,9 @@ protected:
     static void commandShareFile(const std::filesystem::path &source, const std::filesystem::path& sharedPath ,const std::string &sourcefile, const std::string &_username, const std::string &_source_username);
 
 public:
-    explicit FileSystem(const std::string &username, bool isAdmin=false, int count=0);
-    void createFileSystem(const std::string &_username, int count=0);
+    explicit FileSystem(const std::string &username, bool isAdmin=false);
+    void createFileSystem(const std::string &_username);
+    void createFileNameMapping();
     void processUserCommand(const std::string &command, bool isAdmin, const std::string &user);
     static void addUser(const std::string &_username, bool isAdmin = false);
     std::string getCurrentWorkingDirectory();
