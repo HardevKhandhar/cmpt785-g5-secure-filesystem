@@ -16,6 +16,34 @@ bool FileSystem::deleteFile(const std::filesystem::path& filePath) {
     } else {
         std::cout << "Failed to modify shared files" << std::endl;
     }
+
+    std::vector<std::string> contents = splitText(filePath, '/');
+    std::string fileRelativePath;
+    if (contents.size()>3){
+        fileRelativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
+    }
+
+    std::filesystem::rename("./filesystem/.metadata/FileNameMapping.txt", "./filesystem/.metadata/DeleteFileNameMapping.txt");
+
+    std::ifstream oldFile("./filesystem/.metadata/DeleteFileNameMapping.txt");
+    std::ofstream newFile("./filesystem/.metadata/FileNameMapping.txt");
+
+    std::string line;
+    if (oldFile.is_open() && newFile.is_open()) {
+        while (getline(oldFile, line)) {
+            if (line.find(fileRelativePath) == std::string::npos) {
+                newFile << line << std::endl;
+            }
+        }
+        oldFile.close();
+        newFile.close();
+
+        std::remove("./filesystem/.metadata/DeleteFileNameMapping.txt");
+    } else {
+        std::cerr << "Unable to open file" << std::endl;
+        result = false;
+    }
+
     return result;
 }
 
@@ -48,7 +76,6 @@ void FileSystem::fileShare(const std::string &sender, const std::string &filenam
 std::vector<std::string> FileSystem::allReceivers(const std::string &sender, const std::string &filename) {
     std::vector<std::string> receiverlist;
     std::vector<std::string> contents = splitText(filename,'/');
-    std::string _filename = (filename.find('/') != std::string::npos) ? contents[contents.size()/contents[0].size()-1] : filename;
     std::string file = "./filesystem/"+sender+"/.metadata/shareFile.txt";
     if(std::filesystem::exists(file)) {
         std::ifstream inputFile(file);
@@ -61,7 +88,7 @@ std::vector<std::string> FileSystem::allReceivers(const std::string &sender, con
             std::istringstream iss(get_l);
             std::string s, f, r;
             if (std::getline(iss, s, ',') && std::getline(iss, f, ',') && std::getline(iss, r, ',')) {
-                if (sender == s && _filename == f) {
+                if (sender == s && filename == f) {
                     receiverlist.push_back(r);
                 }
             }
@@ -337,18 +364,18 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
 
     std::string workingDirectory = "./" + getCurrentWorkingDirectory();
 
-    std::vector<std::string> _arr = splitText(userPath,'/');
-
     // Check if the file already exists
-    if (std::filesystem::exists(encFileName)) {
-        if (std::filesystem::is_directory(encFileName)) {
+    if (pathExistsInFileNameMapping(username, newPlainPath.string())) {
+        newEncPath = getCipherPath("./filesystem/" + username + "/" + newPlainPath.string());
+
+        if (std::filesystem::is_directory(newEncPath.string())) {
             std::cout << "Unable to create file in specified path." << std::endl;
             return;
         }
 
-        std::cout << "The file '" << encFileName << "' already exists. It will be overwritten." << std::endl;
+        std::cout << "The file '" << filename << "' already exists. It will be overwritten." << std::endl;
         flag = true;
-        receivers = allReceivers(_arr[2],encFileName);
+        receivers = allReceivers(username, newEncPath.string());
     }
 
     if (!flag) {
@@ -358,7 +385,7 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     // Create or open the file
     std::ofstream mkfile(newEncPath);
 
-    // Check if file is opened successfully
+    // Check the if file is opened successfully
     if (!mkfile.is_open()) {
         std::cout << "Unable to open the specified file" << std::endl;
         return;
@@ -368,23 +395,16 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     mkfile << contents;
     mkfile.close();
 
-    // Output success message based on whether the file was created or modified
-    std::vector<std::string> _file = splitText(encFileName,'/');
-    std::string _filename =_file[_file.size()/_file[0].size()-1];
-    std::vector<std::string> workingDirectoryContents = splitText(workingDirectory,'/');
-    std::string sourceUserName = workingDirectoryContents[2];
-    std::string sharedPath = workingDirectory.substr(0,workingDirectory.length()-workingDirectoryContents[3].length())+"shared";
-
     encryptFile(plainUsername, newEncPath);
 
-    if (flag) {
-        if(receivers.size() > 0) {
-            for(const std::string& str:receivers) {
-                if(std::filesystem::exists("./filesystem/"+str+"/shared/"+_filename) && std::filesystem::is_regular_file("./filesystem/"+str+"/shared/"+_filename)) {
-                    deleteFile("./filesystem/" + str + "/shared/" + _filename);
-                }
-                 commandShareFile(encFileName,_filename,str,sourceUserName);
+    if (flag && receivers.size() > 0) {
+        for(const std::string& str:receivers) {
+            if(std::filesystem::exists(str) && std::filesystem::is_regular_file(str)) {
+                deleteFile(str);
             }
+            std::vector<std::string>fileParts = splitText(newEncPath.string(),'/');
+            std::vector<std::string>strParts = splitText(str,'/');
+            commandShareFile(newEncPath, filename, strParts[2], username);
         }
         //share the updated file
         std::cout << "File is modified successfully:  " << filename << std::endl;
@@ -461,11 +481,12 @@ void FileSystem::commandShareFile(const std::filesystem::path &source ,const std
     mkfile << contents;
     mkfile.close();
     encryptFile(getPlainUsername(_username),newSharedEncPath);
+    fileShare(_source_username, source, newSharedEncPath);
 
-    std::cout << "File has been shared!";
+    std::cout << "File has been shared!" << std::endl;
 };
 
-FileSystem::FileSystem(const std::string &username, bool isAdmin):username(username) {
+FileSystem::FileSystem(const std::string &username, bool isAdmin):username(username), isAdmin(isAdmin) {
     plainUsername = getPlainUsername(username);
     base_directory = "./filesystem/" + username;
     if(isAdmin) root_directory = "./filesystem";
@@ -494,7 +515,7 @@ bool fileNameIsValid(const std::string filename) {
 
 void FileSystem::processUserCommand(const std::string &command, bool isAdmin, const std::string &user) {
     if (command.length() > COMMAND_SIZE_LIMIT) {
-        std::cerr << "Error: command size limit (512KB) exceeded" << std::endl;
+        std::cerr << "Error: command size limit (128KB) exceeded" << std::endl;
         return;
     }
 

@@ -22,6 +22,7 @@ private:
     std::string plainUsername;
     std::filesystem::path base_directory;
     std::filesystem::path root_directory;
+    bool isAdmin;
 
 protected:
     static bool deleteFile(const std::filesystem::path& filePath);
@@ -47,7 +48,7 @@ public:
     std::string getCurrentWorkingDirectory();
     std::string getPlainCurrentWorkingDirectory();
 
-    const int COMMAND_SIZE_LIMIT = 512 * 1000; // 512KB
+    const int COMMAND_SIZE_LIMIT = 128 * 1000; // 128KB
 };
 
 #endif // CMPT785_G5_FileSystem_H
