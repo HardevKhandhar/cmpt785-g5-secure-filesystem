@@ -96,10 +96,13 @@ std::string encryptPlainText(const std::string &plaintext, const std::string &us
         std::cerr << "Plaintext is invalid due to length constraints." << std::endl;
         return "";
     }
-    
 
     // Load the public key
+    
+
     std::string publicKeyPath = std::string(PUB_KEY_LOC) + username + "_pub.pem";
+    
+
     BIO *pubKeyFile = BIO_new_file(publicKeyPath.c_str(), "r");
     if (!pubKeyFile) {
         std::cerr << "Error opening public key file." << std::endl;

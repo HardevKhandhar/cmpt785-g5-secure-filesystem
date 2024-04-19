@@ -88,7 +88,7 @@ std::filesystem::path getCipherPath(std::string path) {
         if (line.find(searchKey) != std::string::npos) {
             std::vector<std::string> parts = splitText(line, ',');
             fileNameMapping.close();
-            return "./filesystem/" +parts[0] + "/" + parts.back();
+            return "./filesystem/" + parts[0] + "/" + parts.back();
         }
     }
 
@@ -96,53 +96,17 @@ std::filesystem::path getCipherPath(std::string path) {
     return "";
 }
 
-void FileSystem::changeDirectory(const std::string &dir) {
-    if(dir.empty()) {
-        std::cout << "Directory name not specified." << std::endl;
-        return;
-    }
-
-    std::filesystem::path newPath = base_directory;
-    std::vector<std::string> newDir = splitText(dir,'/');
-
-    // TODO: remove hardcoded isadmin
-    if (dir != "." && dir != ".." && base_directory == root_directory && plainUsername == "admin") {
-        newDir[0] = getCipherUsername(newDir[0]);
-    }
-
-    for (const std::string& str:newDir) {
-        if (str=="..") {
-            if (newPath != root_directory) {
-                newPath = newPath.parent_path();
-            } else {
-                std::cout << "Already at the root directory. Cannot go up." << std::endl;
-                return;
-            }
-        } else if (str == ".metadata") {
-            std::cout << "Metadata access forbidden" << std::endl;
-            return;
-        } else if (str != ".") {
-            newPath /= str;
-        }
-    }
-    std::filesystem::path cipherPath = getCipherPath(newPath);
-    if(cipherPath == "") {
-        cipherPath = newPath;
-    }
-
-    // Check if newPath is valid and within root_directory bounds    
-    if (cipherPath != "" && std::filesystem::exists(cipherPath) && std::filesystem::is_directory(cipherPath) && (cipherPath.string().rfind(root_directory.string(), 0) == 0)) {
-        base_directory = cipherPath;
-    } else {
-        std::cout << "Directory does not exist or is not accessible: " << dir << std::endl;
-    }
-}
-
 std::filesystem::path getPlainPath(std::string path) {
     std::string line;
-
+    
     std::vector<std::string> contents = splitText(path, '/');
-    std::string cipherRelativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
+    std::string cipherRelativePath;
+    if (contents.size()>1){
+        cipherRelativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
+    }
+    else{
+        cipherRelativePath = std::accumulate(contents.begin(), contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
+    }
 
     std::string endWith =  "," + cipherRelativePath;
 
@@ -159,6 +123,75 @@ std::filesystem::path getPlainPath(std::string path) {
 
     fileNameMapping.close();
     return "";
+}
+
+bool userExists(const std::string& username) {
+    for (const auto& entry : std::filesystem::directory_iterator(PUB_KEY_LOC)) {
+        if (entry.is_regular_file() && entry.path().filename() == username  + "_pub.pem") {
+            return true;
+        }
+    }
+    return false;
+}
+
+void FileSystem::changeDirectory(const std::string &dir) {
+    if(dir.empty()) {
+        std::cout << "Directory name not specified." << std::endl;
+        return;
+    }
+
+    for (char c: dir) {
+        if (std::isspace(c) || c == '?' || c == ':' || c == '\\' || c == '*' || c == '"' || c == '|' || c == ',') {
+            std::cout << "Invalid characters for cd, please re-enter" << std::endl;
+            return;
+        }
+    }
+
+    std::filesystem::path tmpBaseDirectory = base_directory;
+    std::vector<std::string> dirVector = splitText(dir,'/');
+
+    for (const std::string& str:dirVector) {
+        std::filesystem::path newPlainPath = tmpBaseDirectory;
+        std::filesystem::path cipherPath = ""; 
+
+        if (str=="..") {
+            if (newPlainPath != root_directory) {
+                newPlainPath = newPlainPath.parent_path();
+                cipherPath = newPlainPath; 
+            } else {
+                std::cout << "Already at the root directory. Cannot go up." << std::endl;
+                return;
+            }
+        } else if (str == ".") {
+            continue;
+        } else if (str == ".metadata") {
+            std::cout << "Metadata access forbidden" << std::endl;
+            return;
+        } else if (tmpBaseDirectory == "./filesystem") {
+            if (!userExists(str)) {
+                std::cout << "Directory does not exist" << std::endl;
+                return;
+            }
+            newPlainPath = "./filesystem/" + str;
+            cipherPath = "./filesystem/" + getCipherUsername(str); 
+        } else if (tmpBaseDirectory == "./filesystem/" + username) {
+            newPlainPath = "./filesystem/" + username + "/" + str;
+            cipherPath = getCipherPath(newPlainPath); 
+        } else {
+            newPlainPath = "./filesystem/" + username + "/" + getPlainPath(tmpBaseDirectory).string()+ "/"+ str;
+            cipherPath = getCipherPath(newPlainPath); 
+        }
+
+        // Check if newPath is valid and within root_directory bounds    
+        if (cipherPath != "" && std::filesystem::exists(cipherPath) && std::filesystem::is_directory(cipherPath) && (cipherPath.string().rfind(root_directory.string(), 0) == 0)) {
+            tmpBaseDirectory = cipherPath;
+        } else {
+            std::cout << "Directory does not exist or is not accessible: " << dir << std::endl;
+            return;
+        }
+    }
+
+    base_directory = tmpBaseDirectory;
 }
 
 void FileSystem::listDirectoryContents(const char *directory) {
@@ -243,61 +276,47 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
         return;
     }
 
-    std::filesystem::path newPath = base_directory;
-    std::vector<std::string> newDir = splitText(filename,'/');
-    for (const std::string& str:newDir) {
-        // Check if there are any invalid characters in the input for the directory name
-        for (char c: str) {
-            if (std::isspace(c) || c == '?' || c == ':' || c == '\\' || c == '*' || c == '/' || c == '"' || c == '|' || c == ',') {
-                std::cout << "Invalid characters added to the filename, please re-enter" << std::endl;
-                return;
-            }
-        }
-
-        if (str=="..") {
-            if (newPath != root_directory) {
-                newPath = newPath.parent_path();
-            } else {
-                std::cout << "Already at the root directory. Cannot go up." << std::endl;
-                return;
-            }
-        } else if (str == ".metadata") {
-            std::cout << "Metadata access forbidden" << std::endl;
+    for (char c: filename) {
+        if (std::isspace(c) || c == '.' || c == '?' || c == ':' || c == '\\' || c == '*' || c == '/' || c == '"' || c == '|' || c == ',') {
+            std::cout << "Invalid characters added to the filename, please re-enter" << std::endl;
             return;
-        } else if (str != ".") {
-            newPath /= str;
         }
     }
 
-    std::string userPath = "./filesystem/" + user + "/personal";
+    std::filesystem::path newPlainPath = getPlainPath(base_directory)/filename;
 
-    if (newPath.string().length() < userPath.length() or newPath.string().substr(0, userPath.length()) != userPath) {
+    std::string encFileName = std::to_string(std::hash<std::string>{}(encryptPlainText(filename, plainUsername)));
+    std::filesystem::path newEncPath = base_directory/encFileName;
+
+    std::string userPath = getCipherPath("./filesystem/" + plainUsername + "/personal").string();
+
+    if (newEncPath.string().length() <= userPath.length() or newEncPath.string().substr(0, userPath.length()) != userPath) {
         std::cout << "Forbidden!" << std::endl;
         return;
     }
 
     std::string workingDirectory = "./" + getCurrentWorkingDirectory();
-    filename = newPath;
 
     std::vector<std::string> _arr = splitText(userPath,'/');
 
-
     // Check if the file already exists
-    if (std::filesystem::exists(filename)) {
-        if (std::filesystem::is_directory(filename)) {
+    if (std::filesystem::exists(encFileName)) {
+        if (std::filesystem::is_directory(encFileName)) {
             std::cout << "Unable to create file in specified path." << std::endl;
             return;
         }
 
-        std::cout << "The file '" << filename << "' already exists. It will be overwritten." << std::endl;
+        std::cout << "The file '" << encFileName << "' already exists. It will be overwritten." << std::endl;
         flag = true;
-        receivers = allReceivers(_arr[2],filename);
+        receivers = allReceivers(_arr[2],encFileName);
     }
 
-    addFileToFileNameMapping(filename);
+    if (flag) {
+        addFileToFileNameMapping(newPlainPath, newEncPath);
+    }
 
     // Create or open the file
-    std::ofstream mkfile(filename);
+    std::ofstream mkfile(newEncPath);
 
     // Check if file is opened successfully
     if (!mkfile.is_open()) {
@@ -310,13 +329,13 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     mkfile.close();
 
     // Output success message based on whether the file was created or modified
-    std::vector<std::string> _file = splitText(filename,'/');
+    std::vector<std::string> _file = splitText(encFileName,'/');
     std::string _filename =_file[_file.size()/_file[0].size()-1];
     std::vector<std::string> workingDirectoryContents = splitText(workingDirectory,'/');
     std::string sourceUserName = workingDirectoryContents[2];
     std::string sharedPath = workingDirectory.substr(0,workingDirectory.length()-workingDirectoryContents[3].length())+"shared";
 
-    encryptFile(plainUsername, filename);
+    encryptFile(plainUsername, newEncPath);
 
     if (flag) {
         if(receivers.size() > 0) {
@@ -324,7 +343,7 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
                 if(std::filesystem::exists("./filesystem/"+str+"/shared/"+_filename) && std::filesystem::is_regular_file("./filesystem/"+str+"/shared/"+_filename)) {
                     deleteFile("./filesystem/" + str + "/shared/" + _filename);
                 }
-                commandShareFile(filename,"./filesystem/"+sourceUserName+"/shared",_filename,str,sourceUserName);
+                commandShareFile(encFileName,"./filesystem/"+sourceUserName+"/shared",_filename,str,sourceUserName);
             }
         }
         //share the updated file
@@ -334,68 +353,40 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
     }
 }
 
-bool userExists(const std::string& username) {
-    for (const auto& entry : std::filesystem::directory_iterator(PUB_KEY_LOC)) {
-        if (entry.is_regular_file() && entry.path().filename() == username  + "_pub.pem") {
-            return true;
-        }
-    }
-    return false;
-}
-
 void FileSystem::createDirectory(const std::string &input, const std::string &user) {
     // Extract directory name from input
     std::string dir = input.substr(input.find(" ") + 1);
+    std::filesystem::path newPlainPath = "./filesystem/" + plainUsername + "/" + getPlainPath(base_directory).string() + "/" + dir;
 
-    std::filesystem::path newPath = base_directory;
-    std::vector<std::string> newDir = splitText(dir,'/');
-    for (const std::string& str:newDir) {
-        // Check if there are any invalid characters in the input for the directory name
-        for (char c: str) {
-            if (std::isspace(c) || c == '?' || c == ':' || c == '\\' || c == '*' || c == '/' || c == '"' || c == '|' || c == ',') {
-                std::cout << "Invalid characters added to the directory filename, please re-enter" << std::endl;
-                return;
-            }
-        }
-
-        if (str=="..") {
-            if (newPath != root_directory) {
-                newPath = newPath.parent_path();
-            } else {
-                std::cout << "Already at the root directory. Cannot go up." << std::endl;
-                return;
-            }
-        } else if (str == ".metadata") {
-            std::cout << "Metadata access forbidden" << std::endl;
+    for (char c: dir) {
+        if (std::isspace(c) || c == '.' || c == '?' || c == ':' || c == '\\' || c == '*' || c == '/' || c == '"' || c == '|' || c == ',') {
+            std::cout << "Invalid characters added to the directory filename, please re-enter" << std::endl;
             return;
-        } else if (str != ".") {
-            newPath /= str;
         }
     }
-    std::string userPath = "./filesystem/" + user + "/personal";
 
-    if (newPath.string().length() < userPath.length() or newPath.string().substr(0, userPath.length()) != userPath) {
+    std::string userPath = "./filesystem/" + plainUsername + "/personal";
+
+    if (newPlainPath.string().length() <= userPath.length() or newPlainPath.string().substr(0, userPath.length()) != userPath) {
         std::cout << "Forbidden!" << std::endl;
         return;
     }
 
     // Check if directory already exists
-    if (std::filesystem::exists(newPath)) {
-        std::cout << "Path already exists" << std::endl;
+    if (pathExistsInFileNameMapping(getPlainPath(base_directory).string() + "/" + dir)) {
+        std::cout << "Path already exists!" << std::endl;
         return;
     }
 
-    createDirectories(newPath);
+    createDirectories(base_directory/dir);
+
     std::cout << "Directory created successfully" << std::endl;
 }
 
-
-
 void FileSystem::catFile(const std::string &filename) {
-    std::string currentWorkingDirectory = getCurrentWorkingDirectory();
-    std::string filePath = "./" + currentWorkingDirectory + "/" + filename;
-
-    std::string file= getCipherPath(filePath);
+    std::string currentWorkingDirectory = base_directory.string();
+    std::string filePlainPath = "./filesystem/" + username + "/" + getPlainPath(base_directory.string()).string() + "/" + filename;
+    std::string file = getCipherPath(filePlainPath).string();
 
     if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file)) {
         std::cout << filename << " doesn't exist." << std::endl;
@@ -534,9 +525,9 @@ void FileSystem::processUserCommand(const std::string &command, bool isAdmin, co
     }
 }
 
-bool pathExistsInFileNameMapping(const std::string username, const std::string relativePath) {
+bool FileSystem::pathExistsInFileNameMapping(const std::string path) {
     std::ifstream fileNameMapping("./filesystem/.metadata/FileNameMapping.txt");
-    
+
     if (!fileNameMapping.is_open()) {
         // std::cerr << "Failed to open the file." << std::endl;
         return false;
@@ -545,9 +536,9 @@ bool pathExistsInFileNameMapping(const std::string username, const std::string r
     std::string line;
     bool found = false;
 
-    std::string searchKey = username + "," + relativePath + ",";
     while (std::getline(fileNameMapping, line)) {
-        if (line.find(searchKey) != std::string::npos) {
+        std::vector<std::string> parts = splitText(path, '/');
+        if (parts[1] != path) {
             found = true;
             break;
         }
@@ -558,20 +549,16 @@ bool pathExistsInFileNameMapping(const std::string username, const std::string r
     return found;
 }
 
-void FileSystem::addFileToFileNameMapping(const std::filesystem::path path) {
-    std::vector<std::string> contents = splitText(path.string(), '/');
+void FileSystem::addFileToFileNameMapping(const std::filesystem::path plainPath, const std::filesystem::path cipherPath) {
+    std::vector<std::string> contents = splitText(cipherPath.string(), '/');
     std::string relativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
-
-    if (pathExistsInFileNameMapping(contents[2], relativePath)) {
-        return;
-    }
 
     std::ofstream fileNameMapping("./filesystem/.metadata/FileNameMapping.txt", std::ios::app | std::ios::out);
     if (!fileNameMapping.is_open()) {
         std::cout << "Error: Could not open FileNameMapping.txt" << std::endl;
         return;
     }
-    fileNameMapping << contents[2] << "," << relativePath << "," << relativePath << std::endl;
+    fileNameMapping << username << "," << plainPath.string() << "," << relativePath << std::endl;
     fileNameMapping.close();
 }
 
@@ -586,21 +573,43 @@ void FileSystem::addUserToUsernameMapping(const std::string username, std::strin
 }
 
 void FileSystem::createDirectories(const std::filesystem::path path) {
-    std::filesystem::create_directories(path);
-
-    std::vector<std::string> contents = splitText(path.string(), '/');
-    std::string relativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;});
-
-    if (pathExistsInFileNameMapping(contents[2], relativePath)) {
+    // path = "./filesystem/14518622622578385111/14584392843928120385111/new"
+    size_t pos = path.string().find_last_of('/');
+    if (pos == std::string::npos) {
         return;
     }
+
+    std::string encryptedPath = path.string().substr(0, pos); // ./filesystem/14518622622578385111
+    std::string plainNewDirPath = path.string().substr(pos + 1);  // personal
+
+
+    username= splitText(encryptedPath,'/')[2];
+
+    std::string plain_username=getPlainUsername(username);
+
+    std::vector<std::string> contents = splitText(encryptedPath, '/');
+    std::string relativePath = std::accumulate(contents.begin() + 3, contents.end(), std::string(), [](const std::string &a, const std::string &b) {return a.empty() ? b : a + '/' + b;}); // 14518622622578385111/14584392843928120385111
+    std::string encNewDirPath = std::to_string(std::hash<std::string>{}(encryptPlainText(plainNewDirPath,plain_username)));
 
     std::ofstream fileNameMapping("./filesystem/.metadata/FileNameMapping.txt", std::ios::app | std::ios::out);
     if (!fileNameMapping.is_open()) {
         std::cout << "Error: Could not open FileNameMapping.txt" << std::endl;
         return;
     }
-    fileNameMapping << contents[2] << "," << relativePath << "," << relativePath << std::endl;
+
+    std::string plainResult = getPlainPath(relativePath).string() + "/" + plainNewDirPath;
+    if (!plainResult.empty() && plainResult[0] == '/') {
+        plainResult.erase(0, 1);
+    }
+
+    std::string cipherResult = relativePath + "/" + encNewDirPath;
+    if (!cipherResult.empty() && cipherResult[0] == '/') {
+        cipherResult.erase(0, 1);
+    }
+
+    fileNameMapping << username << "," << plainResult << "," << cipherResult << std::endl;
+
+    std::filesystem::create_directories(encryptedPath + "/" + encNewDirPath);
 }
 
 void FileSystem::addUser(const std::string &_username, bool isAdmin) {
