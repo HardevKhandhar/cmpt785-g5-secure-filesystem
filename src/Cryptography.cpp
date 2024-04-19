@@ -1,5 +1,45 @@
 #include "Cryptography.h"
 
+std::string getCipherUsername(const std::string& username){
+  std::ifstream usernameMapping("./filesystem/.metadata/UserNameMapping.txt");
+   if (!usernameMapping.is_open()) {
+        // std::cerr << "Failed to open the file." << std::endl;
+        return "";
+    }
+    std::string line;
+
+    while (std::getline(usernameMapping, line)) {
+        std::vector<std::string> contents=splitText(line,',');
+        if (contents[0] == username) {
+          return contents[1];
+        }
+    }
+
+    usernameMapping.close();
+
+    return "";
+}
+
+std::string getPlainUsername(const std::string& encUsername){
+  std::ifstream usernameMapping("./filesystem/.metadata/UserNameMapping.txt");
+   if (!usernameMapping.is_open()) {
+        // std::cerr << "Failed to open the file." << std::endl;
+        return "";
+    }
+    std::string line;
+
+    while (std::getline(usernameMapping, line)) {
+        std::vector<std::string> contents=splitText(line,',');
+        if (contents[1] == encUsername) {
+          return contents[0];
+        }
+    }
+
+    usernameMapping.close();
+
+    return "";
+}
+
 bool createUserKey(const std::string &username, bool isAdmin) {
     bool ret = 0;
     int bits = 4096;
@@ -58,7 +98,11 @@ std::string encryptPlainText(const std::string &plaintext, const std::string &us
     }
 
     // Load the public key
+    
+
     std::string publicKeyPath = std::string(PUB_KEY_LOC) + username + "_pub.pem";
+    
+
     BIO *pubKeyFile = BIO_new_file(publicKeyPath.c_str(), "r");
     if (!pubKeyFile) {
         std::cerr << "Error opening public key file." << std::endl;
@@ -100,8 +144,10 @@ std::string decryptCipherText(std::string ciphertext, const std::string &usernam
     if (ciphertext.empty()) {
         std::cerr << "Ciphertext is empty" << std::endl;
     }
-    BIO *privateKeyFile = BIO_new_file(("./filesystem/" + username + std::string (PRIV_KEY_LOC) + username + "_priv.pem").c_str(), "r");
-    if(!privateKeyFile){
+
+    std::string encUsername = getCipherUsername(username);
+    BIO *privateKeyFile = BIO_new_file(("./filesystem/" + encUsername + std::string (PRIV_KEY_LOC) + username + "_priv.pem").c_str(), "r");
+    if (!privateKeyFile){
         BIO_free_all(privateKeyFile);
         ERR_print_errors_fp(stderr);
         return "";
@@ -116,8 +162,11 @@ std::string decryptCipherText(std::string ciphertext, const std::string &usernam
 
     int decryptLen = RSA_size(rsaPrivKey);
     std::vector<unsigned char> decryptedData(decryptLen);
-    int result = RSA_private_decrypt(ciphertext.size(), reinterpret_cast<const unsigned char *>(ciphertext.data()),
-                                     decryptedData.data(), rsaPrivKey, padding);
+    int result = RSA_private_decrypt(
+        ciphertext.size(), reinterpret_cast<const unsigned char *>(ciphertext.data()),
+        decryptedData.data(), rsaPrivKey, padding
+    );
+
     if (result == -1) {
         std::cerr << "Decryption failed." << std::endl;
         ERR_print_errors_fp(stderr);
@@ -129,4 +178,77 @@ std::string decryptCipherText(std::string ciphertext, const std::string &usernam
     ERR_free_strings();
 
     return std::string{reinterpret_cast<char *>(decryptedData.data()), static_cast<size_t>(result)};
+}
+
+void encryptFile(std::string username, std::string filepath) {
+  // read file
+  std::ifstream infile(filepath);
+  if (!infile) {
+    std::cerr << "Error: Could not open key file '" << filepath << "'" << std::endl;
+    return;
+  }
+  std::string plaintext((std::istreambuf_iterator<char>(infile)),
+                         std::istreambuf_iterator<char>());
+  if (infile.fail() && !infile.eof()) {
+    std::cerr << "Error: Failed to read data from file '" << filepath << "'" << std::endl;
+    infile.close();
+    return;
+  }
+  infile.close();
+
+  // encrypt
+  // chunk the ciphertext
+  std::string ciphertext = "";
+
+  int FILE_SIZE_LIMIT = 8 * 1024 * 512; // 512KB
+
+  int CHUNK_SIZE = 100;
+
+  for (int i = 0; i < plaintext.length(); i+= CHUNK_SIZE) {
+    int remaining_bytes = plaintext.length() - i;
+    std::string plaintext_chunk;
+    if (remaining_bytes < CHUNK_SIZE) {
+      plaintext_chunk = plaintext.substr(i, remaining_bytes);
+    } else {
+      plaintext_chunk = plaintext.substr(i, CHUNK_SIZE);
+    }
+    ciphertext += encryptPlainText(plaintext_chunk, username);
+  }
+
+  // write file
+  std::ofstream outfile(filepath, std::ios::trunc);
+  if (!outfile) {
+    std::cerr << "Error: Could not open file '" << filepath << "'" << std::endl;
+    return;
+  }
+  outfile << ciphertext;
+  if (outfile.fail()) {
+    std::cerr << "Error: Failed to write data to file '" << ciphertext << "'" << std::endl;
+    outfile.close();
+    return;
+  }
+  outfile.close();
+  if (outfile.fail()) {
+    std::cerr << "Error: Failed to close file '" << ciphertext << "'" << std::endl;
+    return;
+  }
+}
+
+std::string decryptFile(std::string username, std::string filepath) {
+  // read file
+  std::ifstream infile(filepath);
+  if (!infile) {
+    std::cerr << "Error: Could not open key file '" << filepath << "'" << std::endl;
+    throw std::runtime_error("Invalid filepath");
+  }
+  std::string ciphertext((std::istreambuf_iterator<char>(infile)),
+                          std::istreambuf_iterator<char>());
+  if (infile.fail() && !infile.eof()) {
+    std::cerr << "Error: Failed to read data from file '" << filepath << "'" << std::endl;
+    infile.close();
+    throw std::runtime_error("Error reading file");
+  }
+  infile.close();
+
+  return decryptCipherText(ciphertext, username);
 }
