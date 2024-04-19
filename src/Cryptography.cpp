@@ -1,5 +1,45 @@
 #include "Cryptography.h"
 
+std::string getCipherUsername(const std::string& username){
+  std::ifstream usernameMapping("./filesystem/.metadata/UserNameMapping.txt");
+   if (!usernameMapping.is_open()) {
+        // std::cerr << "Failed to open the file." << std::endl;
+        return "";
+    }
+    std::string line;
+
+    while (std::getline(usernameMapping, line)) {
+        std::vector<std::string> contents=splitText(line,',');
+        if (contents[0] == username) {
+          return contents[1];
+        }
+    }
+
+    usernameMapping.close();
+
+    return "";
+}
+
+std::string getPlainUsername(const std::string& encUsername){
+  std::ifstream usernameMapping("./filesystem/.metadata/UserNameMapping.txt");
+   if (!usernameMapping.is_open()) {
+        // std::cerr << "Failed to open the file." << std::endl;
+        return "";
+    }
+    std::string line;
+
+    while (std::getline(usernameMapping, line)) {
+        std::vector<std::string> contents=splitText(line,',');
+        if (contents[1] == encUsername) {
+          return contents[0];
+        }
+    }
+
+    usernameMapping.close();
+
+    return "";
+}
+
 bool createUserKey(const std::string &username, bool isAdmin) {
     bool ret = 0;
     int bits = 4096;
@@ -56,6 +96,7 @@ std::string encryptPlainText(const std::string &plaintext, const std::string &us
         std::cerr << "Plaintext is invalid due to length constraints." << std::endl;
         return "";
     }
+    
 
     // Load the public key
     std::string publicKeyPath = std::string(PUB_KEY_LOC) + username + "_pub.pem";
@@ -101,7 +142,8 @@ std::string decryptCipherText(std::string ciphertext, const std::string &usernam
         std::cerr << "Ciphertext is empty" << std::endl;
     }
 
-    BIO *privateKeyFile = BIO_new_file(("./filesystem/" +username+ std::string (PRIV_KEY_LOC) + username + "_priv.pem").c_str(), "r");
+    std::string encUsername = getCipherUsername(username);
+    BIO *privateKeyFile = BIO_new_file(("./filesystem/" + encUsername + std::string (PRIV_KEY_LOC) + username + "_priv.pem").c_str(), "r");
     if (!privateKeyFile){
         BIO_free_all(privateKeyFile);
         ERR_print_errors_fp(stderr);

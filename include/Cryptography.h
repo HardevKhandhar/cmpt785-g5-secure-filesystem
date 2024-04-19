@@ -13,6 +13,8 @@
 #include <iomanip>
 #include <vector>
 
+#include "StringUtil.h"
+
 #ifndef PRIV_KEY_LOC
 #define PRIV_KEY_LOC "/.metadata/private_keys/"
 #endif
@@ -23,11 +25,16 @@
 
 bool createUserKey(const std::string &username, bool isAdmin);
 
+std::string userExistsinFile(const std::string& username);
+
 std::string encryptPlainText(const std::string &plaintext, const std::string &username);
 
 std::string decryptCipherText(std::string ciphertext, const std::string &username);
 
 void encryptFile(std::string username, std::string filepath);
 std::string decryptFile(std::string username, std::string filepath);
+
+std::string getCipherUsername(const std::string& username);
+std::string getPlainUsername(const std::string& encUsername);
 
 #endif // CMPT785_G5_SECURE_FILESYSTEM_ENCRYPTION_H

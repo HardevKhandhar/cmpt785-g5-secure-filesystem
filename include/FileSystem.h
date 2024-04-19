@@ -1,22 +1,25 @@
 #ifndef CMPT785_G5_SECURE_FILESYSTEM_FILESYSTEM_H
 #define CMPT785_G5_SECURE_FILESYSTEM_FILESYSTEM_H
 
-#include <iostream>
+#include <dirent.h>
 #include <filesystem>
 #include <fstream>
-#include <unordered_map>
-#include "Cryptography.h"
-#include "StringUtil.h"
-#include <dirent.h>
-#include <unistd.h>
+#include <iostream>
+#include <numeric>
 #include <string>
 #include <sstream>
+#include <unistd.h>
+#include <unordered_map>
+
+#include "Cryptography.h"
+#include "StringUtil.h"
 
 class FileSystem {
 
 private:
     std::unordered_map<std::string, std::filesystem::path> user_keyfiles;
     std::string username;
+    std::string plainUsername;
     std::filesystem::path base_directory;
     std::filesystem::path root_directory;
 
@@ -29,14 +32,17 @@ protected:
     void makeFile(const std::string& make_file, const std::string &user);
     void createDirectory(const std::string &input, const std::string &user);
     void catFile(const std::string &filename);
+    void addFileToFileNameMapping(const std::filesystem::path path);
+    void addUserToUsernameMapping(const std::string username, std::string encUsername);
+    void createDirectories(const std::filesystem::path path);
     static void commandShareFile(const std::filesystem::path &source, const std::filesystem::path& sharedPath ,const std::string &sourcefile, const std::string &_username, const std::string &_source_username);
 
 public:
     explicit FileSystem(const std::string &username, bool isAdmin=false);
     void createFileSystem(const std::string &_username);
-    void createFileNameMapping();
+    void createMappings();
     void processUserCommand(const std::string &command, bool isAdmin, const std::string &user);
-    static void addUser(const std::string &_username, bool isAdmin = false);
+    void addUser(const std::string &_username, bool isAdmin = false);
     std::string getCurrentWorkingDirectory();
 };
 
