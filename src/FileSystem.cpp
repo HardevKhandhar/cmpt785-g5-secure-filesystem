@@ -243,7 +243,11 @@ void FileSystem::changeDirectory(const std::string &dir) {
                 return;
             }
             newPlainPath = "./filesystem/" + str;
-            cipherPath = "./filesystem/" + getCipherUsername(str); 
+            cipherPath = "./filesystem/" + getCipherUsername(str);
+
+            username = getCipherUsername(str);
+            plainUsername = getPlainUsername(username);
+            base_directory = "./filesystem/" + str;
         } else if (tmpBaseDirectory == "./filesystem/" + username) {
             newPlainPath = "./filesystem/" + username + "/" + str;
             cipherPath = getCipherPath(newPlainPath); 
