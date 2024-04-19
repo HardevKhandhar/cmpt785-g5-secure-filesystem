@@ -115,9 +115,9 @@ std::filesystem::path getPlainPath(std::string path) {
     while (std::getline(fileNameMapping, line)) {
         if (ends_with(line,endWith)) {
             std::vector<std::string> parts = splitText(line, ',');
-            parts = splitText(parts[1], '/');
+            // parts = splitText(parts[1], '/');
             fileNameMapping.close();
-            return parts.back();
+            return parts[1];
         }
     }
 
@@ -215,24 +215,26 @@ void FileSystem::listDirectoryContents(const char *directory) {
             continue;
         }
 
-        std::string plainPath;
+        std::string plainDir;
         if (strcmp(directory, "./filesystem") == 0) {
-            plainPath = getPlainUsername(entry->d_name);
+            plainDir = getPlainUsername(entry->d_name);
         } else {
             // Check if the entry is a directory or a file
             std::string cipherPath = (std::string) directory + "/" + entry->d_name;
-            plainPath = getPlainPath(cipherPath);
+            std::string plainPath = getPlainPath(cipherPath);
+            std::vector<std::string> parts = splitText(plainPath, '/');
+            plainDir = parts.back();
         }
 
         if (entry->d_type == DT_DIR) {
             // It's a directory
-            std::cout << "d -> " << plainPath << std::endl;
+            std::cout << "d -> " << plainDir << std::endl;
         } else if (entry->d_type == DT_REG) {
             // It's a regular file
-            std::cout << "f -> " << plainPath << std::endl;
+            std::cout << "f -> " << plainDir << std::endl;
         } else {
             // For other types, you can either ignore or print a generic type
-            std::cout << "? -> " << plainPath << std::endl;
+            std::cout << "? -> " << plainDir << std::endl;
         }
     }
 
@@ -241,17 +243,12 @@ void FileSystem::listDirectoryContents(const char *directory) {
 }
 
 void FileSystem::makeFile(const std::string& make_file, const std::string &user) {
-    // TODO: set size limit to file
-    // TODO: should be encrypted by share receiver public key
     // TODO: admin should be able to read everything
-    //   if (plaintext.length() > FILE_SIZE_LIMIT) {
-    // std::cerr << "Error: file size limit (512MB) exceeded '" << filepath << "'" << std::endl;
-    // infile.close();
-    // return;
-    //   }
+
     // Extract filename and contents from input
     std::istringstream iss(make_file);
     std::string command, filename, contents;
+
     bool flag = false;
     std::vector<std::string> receivers;
 
@@ -311,7 +308,7 @@ void FileSystem::makeFile(const std::string& make_file, const std::string &user)
         receivers = allReceivers(_arr[2],encFileName);
     }
 
-    if (flag) {
+    if (!flag) {
         addFileToFileNameMapping(newPlainPath, newEncPath);
     }
 
@@ -371,6 +368,8 @@ void FileSystem::createDirectory(const std::string &input, const std::string &us
         std::cout << "Forbidden!" << std::endl;
         return;
     }
+
+    std::cout << "here!" << getPlainPath(base_directory).string() + "/" + dir << std::endl;
 
     // Check if directory already exists
     if (pathExistsInFileNameMapping(getPlainPath(base_directory).string() + "/" + dir)) {
@@ -447,10 +446,15 @@ void FileSystem::createMappings() {
 }
 
 bool fileNameIsValid(const std::string filename) {
-    return !filename.empty() && filename.find("..") == std::string::npos && filename.find('/') == std::string::npos;
+    return !filename.empty() && filename.find(".") == std::string::npos && filename.find('/') == std::string::npos;
 }
 
 void FileSystem::processUserCommand(const std::string &command, bool isAdmin, const std::string &user) {
+    if (command.length() > COMMAND_SIZE_LIMIT) {
+        std::cerr << "Error: command size limit (512KB) exceeded" << std::endl;
+        return;
+    }
+
     if(command.substr(0,3) == "cd ") {
         changeDirectory(command.substr(3));
     } else if(command.substr(0,2) == "ls") {
@@ -529,7 +533,6 @@ bool FileSystem::pathExistsInFileNameMapping(const std::string path) {
     std::ifstream fileNameMapping("./filesystem/.metadata/FileNameMapping.txt");
 
     if (!fileNameMapping.is_open()) {
-        // std::cerr << "Failed to open the file." << std::endl;
         return false;
     }
 
@@ -538,7 +541,7 @@ bool FileSystem::pathExistsInFileNameMapping(const std::string path) {
 
     while (std::getline(fileNameMapping, line)) {
         std::vector<std::string> parts = splitText(path, '/');
-        if (parts[1] != path) {
+        if (parts[1] == path) {
             found = true;
             break;
         }
@@ -573,14 +576,13 @@ void FileSystem::addUserToUsernameMapping(const std::string username, std::strin
 }
 
 void FileSystem::createDirectories(const std::filesystem::path path) {
-    // path = "./filesystem/14518622622578385111/14584392843928120385111/new"
     size_t pos = path.string().find_last_of('/');
     if (pos == std::string::npos) {
         return;
     }
 
-    std::string encryptedPath = path.string().substr(0, pos); // ./filesystem/14518622622578385111
-    std::string plainNewDirPath = path.string().substr(pos + 1);  // personal
+    std::string encryptedPath = path.string().substr(0, pos);
+    std::string plainNewDirPath = path.string().substr(pos + 1);
 
 
     username= splitText(encryptedPath,'/')[2];
@@ -654,4 +656,13 @@ std::string FileSystem::getCurrentWorkingDirectory() {
         }
     }
     return result;
+}
+
+std::string FileSystem::getPlainCurrentWorkingDirectory() {
+    if (base_directory == "./filesystem") {
+        return "filesystem";
+    } else if (base_directory == "./filesystem/" + username) {
+        return "filesystem/" + plainUsername;
+    }
+    return "filesystem/" + plainUsername + "/" + getPlainPath(base_directory).string();
 }

@@ -45,6 +45,9 @@ public:
     void processUserCommand(const std::string &command, bool isAdmin, const std::string &user);
     void addUser(const std::string &_username, bool isAdmin = false);
     std::string getCurrentWorkingDirectory();
+    std::string getPlainCurrentWorkingDirectory();
+
+    const int COMMAND_SIZE_LIMIT = 512 * 1000; // 512KB
 };
 
 #endif // CMPT785_G5_FileSystem_H
