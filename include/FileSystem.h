@@ -32,11 +32,11 @@ protected:
     void makeFile(const std::string& make_file, const std::string &user);
     void createDirectory(const std::string &input, const std::string &user);
     void catFile(const std::string &filename);
-    void addFileToFileNameMapping(const std::filesystem::path plainPath, const std::filesystem::path cipherPath);
+    void addFileToFileNameMapping(const std::filesystem::path plainPath, const std::filesystem::path cipherPath, std::string _username="");
     void addUserToUsernameMapping(const std::string username, std::string encUsername);
     void createDirectories(const std::filesystem::path path);
-    bool pathExistsInFileNameMapping(const std::string path);
-    static void commandShareFile(const std::filesystem::path &source, const std::filesystem::path& sharedPath ,const std::string &sourcefile, const std::string &_username, const std::string &_source_username);
+    bool pathExistsInFileNameMapping(const std::string user, const std::string path);
+    void commandShareFile(const std::filesystem::path &source,const std::string &sourcefile, const std::string &_username, const std::string &_source_username);
 
 public:
     explicit FileSystem(const std::string &username, bool isAdmin=false);
