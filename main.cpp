@@ -5,6 +5,7 @@
 #include "Cryptography.h"
 #include "StringUtil.h"
 
+
 void initializeFileSystem() {
     std::filesystem::create_directories("public_keys");
     std::filesystem::create_directories("filesystem/");
@@ -51,15 +52,16 @@ int main(int argc, char** argv) {
 
     if(!authenticateUser(username)) {
         if(adminStatus) {
-            FileSystem fs(username,adminStatus,1);
-            FileSystem::addUser(username,adminStatus);
+            FileSystem fs(username,adminStatus);
+            fs.addUser(username, adminStatus);
         } else {
             std::cerr << "Authentication failed" << std::endl;
             return 1;
         }
     } else {
         // If the user is successfully authenticated:
-        FileSystem fs(username, adminStatus);
+        std::string encUsername = getCipherUsername(username);
+        FileSystem fs(encUsername, adminStatus);
 
         // Rest of the code to interact with the file system
         std::string border(40, '*');
@@ -77,9 +79,9 @@ int main(int argc, char** argv) {
 
         std::string command;
         while(true) {
-            std::cout << username << "@" << fs.getCurrentWorkingDirectory() << ">";
+            std::cout << username << "@" << fs.getPlainCurrentWorkingDirectory() << ">";
             std::getline(std::cin,command);
-            processCommand(command, fs , adminStatus, username);
+            processCommand(command, fs , adminStatus, encUsername);
         }
     }
 }
